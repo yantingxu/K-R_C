@@ -1,15 +1,3 @@
-// 4.1 - 4.2
-// If the return type is omitted, int is assumed.
-// The functions can occur in any order in the source file, and the source program can be split into multiple files, so long as no function is split. 
-// In any case, if a function fails to return a value, its ``value'' is certain to be garbage. 
-// cc main.c getline.o strindex.o
-/*
-double sum, atof(char []);
-But if (as is more likely) atof were compiled separately, the mismatch would not be detected, atof would return a double that main would treat as an int, and meaningless answers would result. 
-The reason a mismatch can happen is that if there is no function prototype, a function is implicitly declared by its first appearance in an expression
-Furthermore, if a function declaration does not include arguments, that too is taken to mean that nothing is to be assumed about the arguments of atof; all parameter checking is turned off. Use void instead
-*/
-
 // 4.3 External variables
 // External variables are defined outside of any function, and are thus potentionally available to many functions.
 // Functions themselves are always external, because C does not allow functions to be defined inside other functions
@@ -73,6 +61,73 @@ The #if line evaluates a constant integer expression (which may not include size
 */
 
 #include<stdio.h>
+
+
+// 4.1 - 4.2
+// If the return type is omitted, int is assumed.
+// The functions can occur in any order in the source file, and the source program can be split into multiple files, so long as no function is split. 
+// In any case, if a function fails to return a value, its ``value'' is certain to be garbage. 
+// if only main.c is modified, just run cc main.c getline.o strindex.o
+/*
+double sum, atof(char []);
+Function declaration could appear in the body of another function, e.g. main
+But if (as is more likely) atof were compiled separately, the mismatch would not be detected, atof would return a double that main would treat as an int, and meaningless answers would result. 
+The reason a mismatch can happen is that if there is no function prototype, a function is implicitly declared by its first appearance in an expression
+Furthermore, if a function declaration does not include arguments, that too is taken to mean that nothing is to be assumed about the arguments of atof; all parameter checking is turned off. Use void instead
+*/
+
+/* strindex:  return index of t in s, -1 if none */
+int strindex(char s[], char t[])
+{
+    int i, j, k;
+    for (i = 0; s[i] != '\0'; i++) {
+        for (j = i, k = 0; t[k] != '\0' && s[j] == t[k]; j++, k++);
+        if (t[k] == '\0') {
+            return i;
+        }
+    }
+    return -1;
+}
+
+int getline(char s[], int lim)
+{
+    int i, c;
+    for (i = 0; i < lim - 1 && (c = getchar()) != EOF && c != '\n'; i++) {
+        s[i] = c;
+    }
+    if (c == '\n') {
+        s[i++] = c;
+    }
+    s[i] = '\0';
+    return i;
+}
+
+/* atof:  convert string s to double */
+double atof(char s[])
+{
+    int i, sign;
+    for (i = 0; isspace(s[i]); i++);
+    if (s[i] == '-')
+        sign = -1;
+    if (s[i] == '+' || s[i] == '-')
+        i++;
+
+    double val = 0.0;
+    double power = 1.0;
+    while (isdigit(s[i])) {
+        val = 10.0*val + s[i] - '0';
+        i++;
+    }
+    if (s[i] == '.') {
+        i++;
+        while (isdigit(s[i])) {
+            val = 10.0*val + s[i] - '0';
+            power *= 10.0;
+        }
+    }
+    return sign*val/power;
+}
+
 int main()
 {
     char tmp[4] = "abc";

@@ -7,6 +7,9 @@ void reverse(char s[])
 {
     int i, j, len = strlen(s);
     int temp;
+    // A pair of expressions separated by a comma is evaluated left to right,
+    // and the type and value of the result are the type and value of the right operand.
+    // not for function arguments, variables in declarations
     for(i = 0, j = len-1; i < j; i++, j--) {
         if(s[i] != s[j]) {
             temp = s[i];
@@ -17,6 +20,7 @@ void reverse(char s[])
 }
 
 // 去掉字符串尾部的空白
+// You should verify that this is correct behavior even when the string is empty or contains only white space characters.
 int trim(char s[])
 {
     int len = strlen(s);
@@ -154,6 +158,7 @@ void count_digits()
 
     while ((c = getchar()) != EOF) {
         // printf("Char: %c\n", c);
+        // Switch Case: Integer value constant or constant expr
         switch (c) {
             case '0':
             case '1':
@@ -187,6 +192,7 @@ void count_digits()
 
 int main(int argc, char* argv[])
 {
+    // Notice: dangling else
     char s[15] = "abcdefg   ";
     printf("After Trim: %sEND\n", s);
     trim(s);
