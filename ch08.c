@@ -214,8 +214,189 @@ FILE* fopen(char* name, char* mode)
 }
 
 // 8.6 Listing Directories
+// A directory is a file that contains a list of filenames and some indication of where they are located (index into inode list).
 // The inode for a file is where all information about the file except its name is kept. A directory entry generally consists of only two items, the filename and an inode number. 
 
+// Part 1: Stat-related
+// sys/stat.h
+int stat(char *, struct stat *);
+struct stat
+{
+   dev_t     st_dev;      /* device of inode */
+   ino_t     st_ino;      /* inode number */
+   short     st_mode;     /* mode bits */
+   short     st_nlink;    /* number of links to file */
+   short     st_uid;      /* owners user id */
+   short     st_gid;      /* owners group id */
+   dev_t     st_rdev;     /* for special files */
+   off_t     st_size;     /* file size in characters */
+   time_t    st_atime;    /* time last accessed */
+   time_t    st_mtime;    /* time last modified */
+   time_t    st_ctime;    /* time originally created */
+};
+// st_mode: sys/types.h
+#define S_IFMT    0160000  /* type of file: */
+#define S_IFDIR   0040000  /* directory */
+#define S_IFCHR   0020000  /* character special */
+#define S_IFBLK   0060000  /* block special */
+#define S_IFREG   0010000  /* regular */
+
+
+// Part 2: Directory-related, dirent.h
+#define NAME_MAX   14  /* longest filename component; */
+                              /* system-dependent */
+typedef struct {       /* portable directory entry */
+   long ino;                  /* inode number */
+   char name[NAME_MAX+1];     /* name + '\0' terminator */
+} Dirent;
+
+typedef struct {       /* minimal DIR: no buffering, etc. */
+   int fd;               /* file descriptor for the directory */
+   Dirent d;             /* the directory entry */
+} DIR;
+
+DIR *opendir(char *dirname);
+Dirent *readdir(DIR *dfd);
+void closedir(DIR *dfd);
+
+
+// Part 3: System-independent functions
+#include <stdio.h>
+#include <string.h>
+// #include "syscalls.h"
+#include <fcntl.h>      /* flags for read and write */
+#include <sys/types.h>  /* typedefs */
+#include <sys/stat.h>   /* structure returned by stat */
+// #include "dirent.h"
+
+void fsize(char *)
+/* print file name */
+void shell(int argc, char **argv)
+{
+    if (argc == 1)
+        fsize('.')
+    else {
+        while (--argc > 0) {
+            fsize(*++argv);
+        }
+    }
+}
+
+int stat(char *, struct stat *);        // return inode or -1
+void dirwalk(char *, void (*fcn)(char *));
+
+/* fsize:  print the name of file "name" */
+void fsize(char *name)
+{
+    struct stat statbuf;
+    if (stat(name, &statbuf) == -1) {
+        printf("error");
+        return;
+    }
+    if (statbuf.st_mode & S_IFMT != S_IFDIR) {
+        dirwalk(name, fsize);
+    }
+    printf("%d %s", statbuf.st_size, name);
+}
+
+#define MAX_PATH 1024
+/*
+DIR *opendir(char *dirname);
+Dirent *readdir(DIR *dfd);
+void closedir(DIR *dfd);
+*/
+
+/* dirwalk:  apply fcn to all files in dir */
+void dirwalk(char *dir, void (*fcn)(char *))
+{
+    DIR* dfd;       // file descriptor
+    Dirent* dp;
+    if ((dfd = opendir(dir)) == NULL) {
+        printf("error");
+        return;
+    }
+    char name[MAX_PATH];
+    while ((dp = readdir(dfd)) != NULL) {
+        if (dp->name == "." || dp->name == "..") {
+            continue;
+        } else {
+            sprintf(name, "%s/%s", dir, dp->name);
+            (*fcn)(name);
+        }
+    }
+    closedir(dfd);
+}
+
+// Part 4: System-dependent
+// sys/dir.h
+#ifndef DIRSIZ
+#define DIRSIZ  14
+#endif
+struct direct {   /* directory entry */
+   ino_t d_ino;           /* inode number */
+   char  d_name[DIRSIZ];  /* long name does not have '\0' */
+};
+
+int fstat(int fd, struct stat *);       // the same as stat but with fd as arg instead of name
+
+/* opendir:  open a directory for readdir calls */
+DIR *opendir(char *dirname)
+{
+    DIR* dp;
+    int fd = open(dirname, O_RDONLY, 0);
+    if (fd == -1) {
+        return NULL;
+    }
+    struct stat statbuf;
+    if (fstat(fd, &statbuf) == -1) {
+        return NULL;
+    }
+    if (statbuf.st_mode & S_IFMT != S_IFDIR) {
+        return NULL;
+    }
+    dp = (DIR*)malloc(sizeof(DIR));
+    if (dp == NULL) {
+        return NULL;
+    }
+    dp->fd = fd;
+    return dp;
+}
+
+void closedir(DIR* dp)
+{
+    if (dp) {
+        close(dp->fd);
+        free(dp);
+    }
+}
+
+// an independent interface to a specific os
+Dirent* readdir(DIR* dp)
+{
+    struct dirent dirbuf;   // local structure
+    static Dirent d;        // portable structure
+
+    int fd = dp->fd;
+    while (read(fd, (char*)&dirbuf, sizeof(dirent)) == sizeof(dirent)) {
+        if (dirbuf.d_ino == 0) {
+            continue;
+        }
+        d.ino = dirbuf.d_ino;
+        strncpy(d.name, dirbuf.d_name, DIRSIZE);
+        d.name[DIRSIZE] = '\0';
+        return &d;
+    }
+    return NULL;
+}
+
+// 8.7 Example: A storage allocator
+// Thus its free storage is kept as a list of free blocks. Each block contains a size, a pointer to the next block, and the space itself. The blocks are kept in order of increasing storage address, and the last block (highest address) points to the first. 
+// [on request]
+// first-fit
+// If the block is too big, it is split, and the proper amount is returned to the user while the residue remains on the free list. If no big-enough block is found, another large chunk is obtained by the operating system and linked into the free list. 
+// [on free]
+// Freeing also causes a search of the free list, to find the proper place to insert the block being freed.
+// If the block being freed is adjacent to a free block on either side, it is coalesced with it into a single bigger block.
 
 int main()
 {
