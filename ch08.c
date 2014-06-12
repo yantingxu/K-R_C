@@ -391,6 +391,7 @@ Dirent* readdir(DIR* dp)
 
 // 8.7 Example: A storage allocator
 // Thus its free storage is kept as a list of free blocks. Each block contains a size, a pointer to the next block, and the space itself. The blocks are kept in order of increasing storage address, and the last block (highest address) points to the first. 
+// address alignment issues
 // [on request]
 // first-fit
 // If the block is too big, it is split, and the proper amount is returned to the user while the residue remains on the free list. If no big-enough block is found, another large chunk is obtained by the operating system and linked into the free list. 
@@ -398,10 +399,107 @@ Dirent* readdir(DIR* dp)
 // Freeing also causes a search of the free list, to find the proper place to insert the block being freed.
 // If the block being freed is adjacent to a free block on either side, it is coalesced with it into a single bigger block.
 
+typedef long Align;    /* for alignment to long boundary */
+union header {         /* block header */
+   struct {
+       union header *ptr; /* next block if on free list */
+       unsigned size;     /* size of this block */
+   } s;
+   Align x;           /* force alignment of blocks */
+};
+typedef union header Header;
+
+// the requested size in characters is rounded up to the proper number of header-sized units;
+// one more unit for header
+// returned pointer lies at the beginning of the free space, not header
+// If a too-big block is found, the tail end is returned to the user; in this way the header of the original needs only to have its size adjusted.
+
+static Header base;       /* empty list to get started */
+static Header *freep = NULL;     /* start of free list */
+
+/* malloc:  general-purpose storage allocator */
+void *malloc(unsigned nbytes)
+{
+    Header *prev, *p;
+    Header* morecore(unsigned);
+    // 要分配的内存是Header的整数倍
+    unsigned nunits = (nbytes + sizeof(Header) - 1)/sizeof(Header) + 1;     // why -1???
+
+    // 首次调用时的初始化
+    if (freep == NULL) {
+        base.s.ptr = freep = prev = &base;
+    } else {
+        prev = freep;
+    }
+
+    for (p = prev->s.ptr;; p = prev, p = p->s.ptr) {
+        if (p->s.size >= nunits) {
+            if (p->s.size == nunits) {
+                prev->s.ptr = p->s.ptr;
+            } else if (p->s.size > nunits) {
+                p->s.size -= nunits;
+                p += p->s.size;
+                p->s.size = nunits;
+            }
+            freep = prev;
+            return (void*)(p+1);
+        }
+        if (p == freep) {
+            if ((p = morecore(nunits)) == NULL)
+                return NULL;
+        }
+    }
+}
+
+// we don't want to do that on every call to malloc, so morecore requests al least NALLOC units; this larger block will be chopped up as needed
+// The UNIX system call sbrk(n) returns a pointer to n more bytes of storage. sbrk returns -1 if there was no space, even though NULL could have been a better design. The -1 must be cast to char * so it can be compared with the return value.
+// portable only among machines for which general pointer comparison is meaningful. 
+#define NALLOC 1024
+Header* morecore(unsigned nu)
+{
+    char* sbrk(int);
+    if (nu < NALLOC) {
+        nu = NALLOC;
+    }
+    char* cp = sbrk(nu*sizeof(Header));
+    if (cp == (char*)-1)
+        return NULL;
+    Header* up = (Header*)cp;
+    free((void*)(up+1));
+    return freep;
+}
+
+void free(void* ap)
+{
+    Header* bp = (Header*)(ap+1);
+    Header* p;
+    for(p = freep; !(bp > p && bp < p->s.ptr); p = p->s.ptr)
+        if (p >= p->s.ptr) {        // at the end of list
+            break;
+        }
+
+    if (bp + bp->s.size == p->s.ptr) {
+        bp->s.size += p->s.ptr->s.size;
+        bp->s.ptr = p->s.ptr->s.ptr;
+    } else {
+        bp->s.ptr = p->s.ptr;
+    }
+
+    if (p + p->s.size == bp) {
+        p->s.size += bp->s.size;
+        p->s.ptr = bp->s.ptr;
+    } else {
+        p->s.ptr = bp;
+    }
+    freep = p;      // 如果bp和p合并了，那么外围的malloc还得再跑一圈; 没合并的话一步就找到了
+}
+
+
 int main()
 {
     return 0;
 }
+
 
 
 
