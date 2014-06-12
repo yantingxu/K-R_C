@@ -22,4 +22,3 @@ int main(int argc, char* argv[])
     // func(c);
     return 0;
 }
-
